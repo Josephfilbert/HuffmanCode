@@ -26,19 +26,19 @@ class HuffmanCode {
     };
 
     //for custom comparator class
-    struct compare {
-        bool operator()(Node* left, Node* right) {
+    struct Comparator {
+        bool operator()(const Node* left, const Node* right) {
             return left->weight < right->weight;
         }
     };
 
     std::string payload; //the input string
     std::map<char, int /*, std::less<int>*/> charmap; //character frequency map
-    std::priority_queue<Node*, std::vector<Node*>, compare> nodes; //nodes priority queue for processing
+    std::priority_queue<Node*, std::vector<Node*>, Comparator> nodes; //nodes priority queue for processing
 
     typedef std::vector<bool> code_t; //code data type to represent bits
 
-    std::vector<char, code_t> code_map; //character code map
+    std::map<char, code_t> code_map; //character code map
 
     Node *root; //root node of generated root after combined
 
@@ -59,7 +59,7 @@ class HuffmanCode {
 
             if(insert_status.second == false) {
                 //if already exists, increase its number
-                insert_status.second += 1;
+                insert_status.first->second += 1;
             }
         }
     }
@@ -108,7 +108,7 @@ public:
         std::ostringstream oss;
 
         for(std::map<char, int>::const_iterator iter = charmap.begin(); iter != charmap.end(); iter++) {
-            oss << '(' << iter->first << '): ' << iter->second << std::endl;
+            oss << '(' << iter->first << "): " << iter->second << std::endl;
         }
 
         return oss.str();
