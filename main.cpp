@@ -3,7 +3,9 @@
 #include <map>
 #include <fstream>
 #include <sstream>
-
+#include <vector>
+#include <iterator>
+#include <cmath>
 
 class HuffmanCode {
     struct Node {
@@ -33,11 +35,36 @@ class HuffmanCode {
         };
     };
 
+    class bits_type {
+        std::vector<bool> bits;
 
+    public:
+        std::size_t size() {
+            return bits.size();
+        }
+
+        bits_type& append(std::string bit_text) {
+            for(std::string::const_iterator iter = bit_text.begin(); iter != bit_text.end(); iter++) {
+                bits.push_back(*iter=='1'? true : false);
+            }
+            return *this;
+        }
+
+        std::string getBits() {
+            std::ostringstream oss;
+            for(std::vector<bool>::const_iterator iter = bits.begin(); iter != bits.end(); iter++) {
+                oss << (*iter == true? '1' : '0');
+            }
+            return oss.str();
+        }
+    };
 
     std::string payload; //the input string
+    bits_type compressed; //the compressed
+
     std::string serialized_tree; //serialized tree, obtained from Breadth First Search
-    std::map<char, int /*, std::less<int>*/> charmap; //character frequency map
+
+    std::map<char, int> charmap; //character frequency map
     std::priority_queue<Node*, std::vector<Node*>, Node::Comparator> nodes_queue; //nodes priority queue for processing
 
 
@@ -47,6 +74,7 @@ class HuffmanCode {
     Node *root; //root node of generated root after combined
 
     void generate_map() {
+        std::map<char, int>::iterator map_iter;
         for(std::string::const_iterator c = payload.begin(); c != payload.end(); c++) {
             /*if(!charmap.find(*c))
                 charmap.insert(std::pair<char, int>(*c, 1));*/
@@ -59,11 +87,26 @@ class HuffmanCode {
             //the second value determines whether the insertion successful or not
             //if false, it means already exists
 
-            std::pair< std::map<char, int>::iterator, bool> insert_status = charmap.insert(std::pair<char, int>(*c, 1));
+            /*std::pair< std::map<char, int>::iterator, bool> insert_status = charmap.insert(std::pair<char, int>(*c, 1));
 
             if(insert_status.second == false) {
                 //if already exists, increase its number
                 insert_status.first->second += 1;
+            }*/
+
+            //with iterator
+            //insert first element
+
+            if(charmap.empty()) {
+
+                //first insertion will always successful, it will return iterator to inserted data
+                map_iter = charmap.insert(std::pair<char, int>(*c, 1)).first;
+
+            } else {
+                map_iter = charmap.insert(map_iter, std::pair<char, int>(*c, 0));
+
+                //if fail, it will be increased, if not yet exists it will be 0 + 1
+                map_iter->second += 1;
             }
         }
     }
@@ -105,31 +148,42 @@ class HuffmanCode {
         //base condition: if the node is null, then done
         if(rootnode==nullptr) return;
 
-        //do in order traversal
+        if(rootnode->left != nullptr) create_code_map(rootnode->left, code + '0');
+        if(rootnode->right != nullptr) create_code_map(rootnode->right, code + '1');
 
-        //call recursive function to left subtree
-        create_code_map(rootnode->left, code + '0');
-
-        //process this node
-
-        //use iterator as hint to improve insertion speed, but must be done when at least one data available
-        if(code_map.empty()) {
-            //this will return iterator to newly inserted data as hint for next insertion
-            code_map_iterator = code_map.insert(std::pair<char, std::string>(rootnode->character, code)).first;
+        //if leaf node
+        if(rootnode->left == nullptr && rootnode->right == nullptr) {
+            if(code_map.empty()) {
+                //this will return iterator to newly inserted data as hint for next insertion
+                code_map_iterator = code_map.insert(std::pair<char, std::string>(rootnode->character, code)).first;
+            }
+            else { //with hint
+                code_map_iterator = code_map.insert(code_map_iterator, std::pair<char, std::string>(rootnode->character, code));
+            }
         }
-        else { //with hint
-            code_map_iterator = code_map.insert(code_map_iterator, std::pair<char, std::string>(rootnode->character, code));
+    }
+
+    void compress() {
+        for(std::string::const_iterator iter = payload.begin(); iter!= payload.end(); iter++) {
+            compressed.append(code_map.at(*iter));
         }
-
-
-        //call recursive function to right subtree
-        create_code_map(rootnode->right, code + '1');
     }
 
 
 
-    void serialize_tree() {
+    //use pre-order traversal
+    void serialize_tree(Node* rootnode) {
+        if(rootnode == nullptr) serialized_tree += "# ";
+        else {
+            //preorder write
+            if(rootnode->character == -1)
+                serialized_tree += "* ";
+            else
+                serialized_tree += std::string(1, rootnode->character) + ' ';
 
+            serialize_tree(rootnode->left);
+            serialize_tree(rootnode->right);
+        }
     }
 
 public:
@@ -139,6 +193,10 @@ public:
         generate_nodes_queue(); //push all from map to priority queue
         generate_tree(); //generate tree
         create_code_map(root); //create code map
+
+        serialize_tree(root);
+        serialized_tree.pop_back();
+        compress();
     }
 
     ~HuffmanCode() {
@@ -181,6 +239,7 @@ public:
     }
 
     std::string print_code_map() {
+
         std::ostringstream oss;
 
         for(std::map<char, std::string>::const_iterator iter = code_map.begin(); iter != code_map.end(); iter++) {
@@ -189,7 +248,20 @@ public:
 
         return oss.str();
     }
+
+    std::string getSerializedTree() {
+        return serialized_tree;
+    }
+
+    int getCompressionRatio() {
+        return std::ceil((payload.size() * 8 - compressed.size()) / static_cast<float>(payload.size() * 8) * 100);
+    }
+
+    std::string getCompressedString() {
+        return compressed.getBits();
+    }
 };
+
 
 //file structure
 /*
@@ -207,6 +279,10 @@ int main()
     std::cout << test.printCharFreq() << std::endl;
     std::cout << test.print_code_map() << std::endl;
     //std::cout << test.printQueue() << std::endl;
+
+    std::cout << "Serialized tree : " << test.getSerializedTree() << std::endl;
+    std::cout << "Compressed : " << test.getCompressedString() << std::endl;
+    std::cout << "Compression ratio : " << test.getCompressionRatio() << std::endl;
 
     return 0;
 }
