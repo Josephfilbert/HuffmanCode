@@ -6,6 +6,8 @@
 #include <vector>
 #include <iterator>
 #include <cmath>
+#include <algorithm>
+#include <bitset>
 
 class HuffmanCode {
     struct Node {
@@ -37,26 +39,186 @@ class HuffmanCode {
 
     class bits_type {
         std::vector<bool> bits;
+        bool modified;
+
+        std::string bits_str;
+        std::string bits_encoded;
 
     public:
+
+        static bool is_bits(std::string str) {
+            for(std::string::const_iterator iter = str.begin(); iter != str.end(); iter++) {
+                if(*iter!='1' || *iter!='0')
+                    return false;
+            }
+            return true;
+        }
+
+        bits_type(): modified(true) {}
+
         std::size_t size() {
             return bits.size();
         }
 
         bits_type& append(std::string bit_text) {
-            for(std::string::const_iterator iter = bit_text.begin(); iter != bit_text.end(); iter++) {
-                bits.push_back(*iter=='1'? true : false);
+            if(is_bits) {
+                modified = true;
+                for(std::string::const_iterator iter = bit_text.begin(); iter != bit_text.end(); iter++) {
+                    bits.push_back(*iter=='1'? true : false);
+                }
             }
             return *this;
         }
 
-        std::string getBits() {
-            std::ostringstream oss;
-            for(std::vector<bool>::const_iterator iter = bits.begin(); iter != bits.end(); iter++) {
-                oss << (*iter == true? '1' : '0');
-            }
-            return oss.str();
+        bits_type& append(const bits_type& rhs) {
+            bits.insert(bits.end(), rhs.bits.begin(), rhs.bits.end());
+            modified = true;
+            return *this;
         }
+
+        bits_type& append(int rhs) {
+            return append(std::bitset<32>(rhs).to_string());
+        }
+
+        std::string getBits_str() {
+            if(modified) {
+                std::ostringstream oss;
+                for(std::vector<bool>::const_iterator iter = bits.begin(); iter != bits.end(); iter++) {
+                    oss << (*iter == true? '1' : '0');
+                }
+
+                bits_str = oss.str();
+                modified = false;
+            }
+            return bits_str;
+        }
+
+        std::string getEncodedBits(int &length) {
+
+            if(modified) {
+                std::ostringstream oss;
+                length = 0;
+                char process = 0;
+
+                for(std::vector<bool>::const_iterator iter = bits.begin(); iter != bits.end(); iter++) {
+                    //set the bits
+                    process |= *iter << (7 - (length++ % 8));
+
+                    //check length, if reach a byte, process new
+                    if(length % 8 == 0) {
+                        oss << process;
+                        process = 0;
+                    }
+                }
+
+                //if there is still left, flush it
+                if(length % 8 > 0) {
+                    oss << process;
+                }
+
+                bits_encoded = oss.str();
+                modified = false;
+            }
+            return bits_encoded;
+        }
+
+
+
+        bits_type operator+(const bits_type& rhs) {
+            bits_type temp(*this);
+
+            temp.bits.insert(temp.bits.end(), rhs.bits.begin(), rhs.bits.end());
+            temp.modified = true;
+
+            return temp;
+        }
+
+        bits_type operator+(std::string rhs) {
+            bits_type temp(*this);
+            return temp.append(rhs);
+        }
+
+        bits_type operator+(int rhs) {
+            bits_type temp(*this);
+            return temp.append(std::bitset<32>(rhs).to_string());
+        }
+
+        bits_type& operator+=(const bits_type& rhs) {
+            return (*this = *this + rhs);
+        }
+
+        bits_type& operator+=(std::string rhs) {
+            return (*this = *this + rhs);
+        }
+
+        bits_type& operator+=(int rhs) {
+            return (*this = *this + rhs);
+        }
+
+    };
+
+    class FileHandler {
+
+        //file structure
+        /*
+        num_bits: int
+        tree_length: int
+        tree_structure
+        data_length: int
+        data_payload
+        */
+
+        bits_type tree;
+        bits_type payload;
+
+        std::string filename;
+
+        bool output_mode;
+
+    public:
+
+        //first constructor is for output to file.
+        FileHandler(std::string fname, bits_type serial_tree, bits_type payload_bits): output_mode(true), filename(fname), tree(serial_tree), payload(payload_bits) {
+            bits_type output_payload;
+
+            //first, set the number of bits
+            output_payload.append(std::bitset<32>(payload_bits.size()).to_string())
+
+                //then add the tree length
+                .append(static_cast<int>(tree.size()))
+
+                //insert the tree structure
+                .append(tree);
+
+                //the length of data
+                .append(payload_bits.size());
+
+                //the payload
+                .append(payload_bits);
+
+
+
+        }
+
+        //For input
+        FileHandler(std::string fname): filename(fname), output_mode(false) {
+
+        }
+
+        void write() {
+
+            if(!output_mode) return;
+
+            //write to file
+            std::ofstream outfile(fname, std::ios::out | std::ios::trunc);
+            std::istringstream iss(output_payload);
+
+            std::copy(std::istreambuf_iterator<char>(iss), std::istreambuf_iterator<char>(), std:ostreambuf_iterator<char>(outfile));
+
+            outfile.close();
+        }
+
+
     };
 
     std::string payload; //the input string
@@ -119,8 +281,8 @@ class HuffmanCode {
     }
 
     void generate_tree() {
-        //use reference for easy processing
         while (nodes_queue.size() > 1) {
+            //get first node
             Node* firstNode = nodes_queue.top();
 
             //pop and get the second node
@@ -172,14 +334,15 @@ class HuffmanCode {
 
 
     //use pre-order traversal
+    //this will be used to output to file
     void serialize_tree(Node* rootnode) {
-        if(rootnode == nullptr) serialized_tree += "# ";
+        if(rootnode == nullptr) serialized_tree += '\0';
         else {
             //preorder write
             if(rootnode->character == -1)
-                serialized_tree += "* ";
+                serialized_tree += '\1';
             else
-                serialized_tree += std::string(1, rootnode->character) + ' ';
+                serialized_tree += rootnode->character;
 
             serialize_tree(rootnode->left);
             serialize_tree(rootnode->right);
@@ -220,7 +383,7 @@ public:
         return oss.str();
     }
 
-    //FOR DEBUGGING PURPOSE ONLY
+    //FOR TESTING PURPOSE ONLY
     //Prints all Priority Queue contents after initial queue creation
     //This will delete all created nodes in queue
     std::string printQueue() {
@@ -258,18 +421,12 @@ public:
     }
 
     std::string getCompressedString() {
-        return compressed.getBits();
+        return compressed.getBits_str();
     }
 };
 
 
-//file structure
-/*
-num_bits: int
-data_start_pos: int
-tree_structure
-data_payload
-*/
+
 
 int main()
 {
@@ -280,9 +437,9 @@ int main()
     std::cout << test.print_code_map() << std::endl;
     //std::cout << test.printQueue() << std::endl;
 
-    std::cout << "Serialized tree : " << test.getSerializedTree() << std::endl;
+    //std::cout << "Serialized tree : " << test.getSerializedTree() << std::endl;
     std::cout << "Compressed : " << test.getCompressedString() << std::endl;
-    std::cout << "Compression ratio : " << test.getCompressionRatio() << std::endl;
+    std::cout << "Compression ratio : " << test.getCompressionRatio() << '%' << std::endl;
 
     return 0;
 }
