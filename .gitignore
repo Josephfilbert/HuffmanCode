@@ -2,3 +2,4 @@ HuffmanCode.layout
 obj/
 bin/
 HuffmanCode.depend
+*.enc

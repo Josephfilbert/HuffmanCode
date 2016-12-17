@@ -8,6 +8,11 @@
 #include <cmath>
 #include <algorithm>
 #include <bitset>
+#include <limits>
+
+void clear_cin() {
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
 
 class HuffmanCode {
     struct Node {
@@ -56,6 +61,10 @@ class HuffmanCode {
 
         bits_type(): modified(true) {}
 
+        bits_type(std::string s): modified(true) {
+            append_str(s);
+        }
+
         std::size_t size() {
             return bits.size();
         }
@@ -68,6 +77,14 @@ class HuffmanCode {
                 }
             }
             return *this;
+        }
+
+        bits_type& append_str(std::string text) {
+            for(std::string::const_iterator iter = text.begin(); iter!= text.end(); iter++) {
+                for(int i=0; i<8; i++) {
+                    bits.push_back(static_cast<bool>((*iter >> (7 - i)) & 1));
+                }
+            }
         }
 
         bits_type& append(const bits_type& rhs) {
@@ -98,22 +115,23 @@ class HuffmanCode {
             if(modified) {
                 std::ostringstream oss;
                 length = 0;
-                char process = 0;
+                unsigned char process = 0;
 
                 for(std::vector<bool>::const_iterator iter = bits.begin(); iter != bits.end(); iter++) {
                     //set the bits
-                    process |= *iter << (7 - (length++ % 8));
+                    if(*iter)
+                        process |= 1 << (7 - (length % 8));
 
                     //check length, if reach a byte, process new
-                    if(length % 8 == 0) {
-                        oss << process;
+                    if(++length % 8 == 0) {
+                        oss.put(process);
                         process = 0;
                     }
                 }
 
                 //if there is still left, flush it
                 if(length % 8 > 0) {
-                    oss << process;
+                    oss.put(process);
                 }
 
                 bits_encoded = oss.str();
@@ -174,12 +192,13 @@ class HuffmanCode {
         std::string filename;
 
         bool output_mode;
+        bits_type output_payload;
 
     public:
 
         //first constructor is for output to file.
         FileHandler(std::string fname, bits_type serial_tree, bits_type payload_bits): output_mode(true), filename(fname), tree(serial_tree), payload(payload_bits) {
-            bits_type output_payload;
+
 
             //first, set the number of bits
             output_payload.append(std::bitset<32>(payload_bits.size()).to_string())
@@ -188,10 +207,10 @@ class HuffmanCode {
                 .append(static_cast<int>(tree.size()))
 
                 //insert the tree structure
-                .append(tree);
+                .append(tree)
 
                 //the length of data
-                .append(payload_bits.size());
+                .append(payload_bits.size())
 
                 //the payload
                 .append(payload_bits);
@@ -208,14 +227,19 @@ class HuffmanCode {
         void write() {
 
             if(!output_mode) return;
+            int dummy;
 
             //write to file
-            std::ofstream outfile(fname, std::ios::out | std::ios::trunc);
-            std::istringstream iss(output_payload);
+            std::ofstream outfile(filename, std::ios::out | std::ios::trunc);
+            std::istringstream iss(output_payload.getEncodedBits(dummy));
 
-            std::copy(std::istreambuf_iterator<char>(iss), std::istreambuf_iterator<char>(), std:ostreambuf_iterator<char>(outfile));
+            std::copy(std::istreambuf_iterator<char>(iss), std::istreambuf_iterator<char>(), std::ostreambuf_iterator<char>(outfile));
 
             outfile.close();
+        }
+
+        void read() {
+
         }
 
 
@@ -351,7 +375,7 @@ class HuffmanCode {
 
 public:
 
-    HuffmanCode(std::string input): payload(input), root(nullptr) {
+    void do_compress_routine() {
         generate_map(); //create character frequency map
         generate_nodes_queue(); //push all from map to priority queue
         generate_tree(); //generate tree
@@ -360,6 +384,25 @@ public:
         serialize_tree(root);
         serialized_tree.pop_back();
         compress();
+    }
+
+    HuffmanCode(std::string input): payload(input), root(nullptr), serialized_tree("") {
+        do_compress_routine();
+
+        writefile();
+    }
+
+    HuffmanCode() {
+
+    }
+
+    void readfile(std::string fname) {
+
+    }
+
+    //output to file
+    void writefile() {
+        FileHandler("test.enc", bits_type(serialized_tree), compressed).write();
     }
 
     ~HuffmanCode() {
@@ -428,18 +471,27 @@ public:
 
 
 
-int main()
+int main(int argc, char **argv)
 {
     //std::cout << "Hello world!" << std::endl;
 
-    HuffmanCode test(std::string("Hello world"));
+    /*HuffmanCode test(std::string("C++ Implementation of Huffman Coding."));
     std::cout << test.printCharFreq() << std::endl;
     std::cout << test.print_code_map() << std::endl;
     //std::cout << test.printQueue() << std::endl;
 
     //std::cout << "Serialized tree : " << test.getSerializedTree() << std::endl;
     std::cout << "Compressed : " << test.getCompressedString() << std::endl;
-    std::cout << "Compression ratio : " << test.getCompressionRatio() << '%' << std::endl;
+    std::cout << "Compression ratio : " << test.getCompressionRatio() << '%' << std::endl;*/
+
+    int mainmenu;
+
+    do {
+        mainmenu = -1;
+
+        std::cout << "Huffman Coding Compression"
+
+    } while(mainmenu!=0);
 
     return 0;
 }
