@@ -9,10 +9,18 @@
 #include <algorithm>
 #include <bitset>
 #include <limits>
+#include <iomanip>
+#include <cstring>
 
 void clear_cin() {
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
+
+void invert_endian_int(unsigned int& num) {
+    num = (num << 24) | ((num << 8) & 0x00ff0000) | ((num >> 8) & 0x0000ff00) | (num >> 24);
+}
+
+
 
 class HuffmanCode {
     struct Node {
@@ -20,6 +28,9 @@ class HuffmanCode {
         int weight;
         Node* left;
         Node* right;
+
+        //creates Node without weight for decompression
+        Node(char c): character(c), weight(0), left(nullptr), right(nullptr) {}
 
         //create new node for nodes priority queue
         Node(char c, int w): character(c), weight(w), left(nullptr), right(nullptr) {}
@@ -32,6 +43,10 @@ class HuffmanCode {
             //recursive deletion
             if(left!=nullptr) delete left;
             if(right!=nullptr) delete right;
+        }
+
+        bool isLeaf() {
+            return (left==nullptr && right==nullptr);
         }
 
         //for custom comparator class
@@ -80,11 +95,35 @@ class HuffmanCode {
         }
 
         bits_type& append_str(std::string text) {
+            modified = true;
             for(std::string::const_iterator iter = text.begin(); iter!= text.end(); iter++) {
                 for(int i=0; i<8; i++) {
                     bits.push_back(static_cast<bool>((*iter >> (7 - i)) & 1));
                 }
             }
+            return *this;
+        }
+
+        bits_type& append_str(std::string text, int nBits) {
+            modified = true;
+            int i = 0;
+            for(std::string::const_iterator iter = text.begin(); i <nBits && iter!= text.end(); iter++) {
+                for(; (i % 8) < 8 && i < nBits; i++) {
+                    bits.push_back(static_cast<bool>((*iter >> (7 - (i % 8))) & 1));
+                }
+            }
+            return *this;
+        }
+
+        void clear() {
+            bits.clear();
+            modified = true;
+            bits_str.clear();
+            bits_encoded.clear();
+        }
+
+        bool isEmpty() {
+            return bits.empty();
         }
 
         bits_type& append(const bits_type& rhs) {
@@ -110,7 +149,9 @@ class HuffmanCode {
             return bits_str;
         }
 
-        std::string getEncodedBits(int &length) {
+        std::string getEncodedBits() {
+
+            int length;
 
             if(modified) {
                 std::ostringstream oss;
@@ -121,6 +162,7 @@ class HuffmanCode {
                     //set the bits
                     if(*iter)
                         process |= 1 << (7 - (length % 8));
+                        //process |= 1 << (length % 8);
 
                     //check length, if reach a byte, process new
                     if(++length % 8 == 0) {
@@ -142,7 +184,7 @@ class HuffmanCode {
 
 
 
-        bits_type operator+(const bits_type& rhs) {
+        /*bits_type operator+(const bits_type& rhs) {
             bits_type temp(*this);
 
             temp.bits.insert(temp.bits.end(), rhs.bits.begin(), rhs.bits.end());
@@ -171,6 +213,12 @@ class HuffmanCode {
 
         bits_type& operator+=(int rhs) {
             return (*this = *this + rhs);
+        }*/
+
+        bool& operator[](int offset) {
+            bool res = bits[offset];
+			modified = true;
+            return res;
         }
 
     };
@@ -180,9 +228,8 @@ class HuffmanCode {
         //file structure
         /*
         num_bits: int
-        tree_length: int
+        tree_length: int (number of bytes)
         tree_structure
-        data_length: int
         data_payload
         */
 
@@ -204,13 +251,11 @@ class HuffmanCode {
             output_payload.append(std::bitset<32>(payload_bits.size()).to_string())
 
                 //then add the tree length
-                .append(static_cast<int>(tree.size()))
+                //because it's size is always divisible by 8
+                .append(static_cast<int>(tree.size()) / 8)
 
                 //insert the tree structure
                 .append(tree)
-
-                //the length of data
-                .append(payload_bits.size())
 
                 //the payload
                 .append(payload_bits);
@@ -227,18 +272,91 @@ class HuffmanCode {
         void write() {
 
             if(!output_mode) return;
-            int dummy;
 
             //write to file
             std::ofstream outfile(filename, std::ios::out | std::ios::trunc);
-            std::istringstream iss(output_payload.getEncodedBits(dummy));
+            std::istringstream iss(output_payload.getEncodedBits());
 
             std::copy(std::istreambuf_iterator<char>(iss), std::istreambuf_iterator<char>(), std::ostreambuf_iterator<char>(outfile));
 
             outfile.close();
         }
 
-        void read() {
+        void read(std::string& serial_tree, bits_type& compressed_bits) {
+            if(output_mode) return;
+
+            std::ifstream infile(filename);
+            std::stringstream file_content;
+
+            std::copy(std::istreambuf_iterator<char>(infile), std::istreambuf_iterator<char>(), std::ostreambuf_iterator<char>(file_content));
+
+            infile.close();
+
+            std::cout << "Current pos : " << file_content.tellg() << std::endl;
+
+            //get the number of bits
+            unsigned int num_bits;
+            file_content.read(reinterpret_cast<char*>(&num_bits), 4);
+            invert_endian_int(num_bits);
+
+            std::cout << "Number bits : " << num_bits << std::endl;
+            std::cout << "Current pos : " << file_content.tellg() << std::endl;
+
+            //number of tree length in bytes
+            unsigned int tree_length;
+            file_content.read(reinterpret_cast<char*>(&tree_length), 4);
+            invert_endian_int(tree_length);
+
+            std::cout << "Tree length : " << tree_length << std::endl;
+            std::cout << "Current pos : " << file_content.tellg() << std::endl;
+
+            //read the tree
+            char *tree_content = new char[tree_length + 1];
+            char *ptr = tree_content;
+
+
+            for(int i=0;i<tree_length;i++) {
+                file_content.read(ptr++, 1);
+            }
+
+            tree_content[tree_length] = 0;
+
+            //std::cout << "File content : " << file_content << std::endl;
+
+            //read the payload
+            //std::string payload_content(std::istreambuf_iterator<char>(file_content), std::istreambuf_iterator<char>());
+
+            std::string payload_content;
+            payload_content.insert(payload_content.begin(), std::istreambuf_iterator<char>(file_content), std::istreambuf_iterator<char>());
+
+           /* std::ostringstream payload_content;
+            std::copy(std::istreambuf_iterator<char>(file_content), std::istreambuf_iterator<char>(), std::ostreambuf_iterator<char>(payload_content));*/
+
+            //insert it to compressed_bits
+            compressed_bits.append_str(payload_content, num_bits);
+
+            std::cout << "Tree address : " << std::hex << reinterpret_cast<void*>(tree_content) << std::endl;
+
+            char *paycon = new char[payload_content.size() + 1];
+            std::strcpy(paycon, payload_content.c_str());
+
+            std::cout << "Payload address : " << std::hex << reinterpret_cast<void*>(paycon) << std::endl;
+
+            /*char *payload_con = new char[num_bits - 1];
+            std::strncpy(payload_con, payload_content.str().c_str(), num_bits - 1);
+            payload_con[num_bits - 2] = 0;
+
+            std::cout << "Payload con address : " << reinterpret_cast<void*>(payload_con) << std::endl;*/
+
+
+            serial_tree.assign(tree_content);
+
+            std::system("pause");
+
+            delete[] tree_content;
+            delete[] paycon;
+            //delete[] payload_con;
+
 
         }
 
@@ -338,7 +456,7 @@ class HuffmanCode {
         if(rootnode->right != nullptr) create_code_map(rootnode->right, code + '1');
 
         //if leaf node
-        if(rootnode->left == nullptr && rootnode->right == nullptr) {
+        if(rootnode->isLeaf()) {
             if(code_map.empty()) {
                 //this will return iterator to newly inserted data as hint for next insertion
                 code_map_iterator = code_map.insert(std::pair<char, std::string>(rootnode->character, code)).first;
@@ -355,7 +473,54 @@ class HuffmanCode {
         }
     }
 
+    void decompress() {
 
+        //if tree is empty or the only node, do nothing
+        if(root==nullptr || root->isLeaf()) return;
+
+        //decompress directly from tree
+        Node* ptr = root;
+
+        bool isNextNull = false;
+
+        for(int i=0; i<compressed.size(); i++) {
+            //traverse while add to the cur_bits
+            if(compressed[i]==false) {
+                if(ptr->left != nullptr)
+                    ptr = ptr->left;
+                else
+                    isNextNull = true;
+            } else {
+                if(ptr->right != nullptr)
+                    ptr = ptr->right;
+                else
+                    isNextNull = true;
+            }
+
+            if(isNextNull) {
+                //we reached the leaf, decrypt it!
+                payload += ptr->character;
+
+                //reset variables
+                ptr = root;
+                isNextNull = false;
+                i--;
+            }
+
+            /*if(ptr->isLeaf()) {
+                payload += ptr->character;
+                ptr = root;
+            }
+
+            if(compressed[i])
+                ptr = ptr->right;
+            else
+                ptr = ptr->left;*/
+
+
+
+        }
+    }
 
     //use pre-order traversal
     //this will be used to output to file
@@ -373,6 +538,24 @@ class HuffmanCode {
         }
     }
 
+
+
+    void deserialize_tree(Node*& rootPtr, std::string::const_iterator sBeg, std::string::const_iterator sEnd) {
+        if(sBeg == sEnd || *sBeg == '\0') return;
+
+        //create node
+        char c;
+        if(*sBeg == '\1')
+            c = -1;
+        else
+            c = *sBeg;
+
+        rootPtr = new Node(c);
+
+        deserialize_tree(rootPtr->left, ++sBeg, sEnd);
+        deserialize_tree(rootPtr->right, ++sBeg, sEnd);
+    }
+
 public:
 
     void do_compress_routine() {
@@ -382,14 +565,11 @@ public:
         create_code_map(root); //create code map
 
         serialize_tree(root);
-        serialized_tree.pop_back();
         compress();
     }
 
     HuffmanCode(std::string input): payload(input), root(nullptr), serialized_tree("") {
         do_compress_routine();
-
-        writefile();
     }
 
     HuffmanCode() {
@@ -397,12 +577,20 @@ public:
     }
 
     void readfile(std::string fname) {
+        FileHandler fh(fname);
+        fh.read(serialized_tree, compressed);
 
+        deserialize_tree(root, serialized_tree.begin(), serialized_tree.end());
+        decompress();
     }
 
     //output to file
-    void writefile() {
-        FileHandler("test.enc", bits_type(serialized_tree), compressed).write();
+    void writefile(std::string fname) {
+        FileHandler(fname, bits_type(serialized_tree), compressed).write();
+    }
+
+    std::string getPayload() {
+        return payload;
     }
 
     ~HuffmanCode() {
@@ -455,8 +643,17 @@ public:
         return oss.str();
     }
 
-    std::string getSerializedTree() {
-        return serialized_tree;
+    std::string getSerializedTree_readable(char nullChar = '#', char parentChar = '*') {
+        std::string result;
+        result.reserve(serialized_tree.size());
+        for(std::string::const_iterator c = serialized_tree.begin(); c != serialized_tree.end(); c++) {
+            switch(*c) {
+                case '\0': result += nullChar; break;
+                case '\1': result += parentChar; break;
+                default: result += *c;
+            }
+        }
+        return result;
     }
 
     int getCompressionRatio() {
@@ -475,23 +672,46 @@ int main(int argc, char **argv)
 {
     //std::cout << "Hello world!" << std::endl;
 
-    /*HuffmanCode test(std::string("C++ Implementation of Huffman Coding."));
+    /*HuffmanCode test(std::string("My Code C++"));
     std::cout << test.printCharFreq() << std::endl;
     std::cout << test.print_code_map() << std::endl;
     //std::cout << test.printQueue() << std::endl;
 
     //std::cout << "Serialized tree : " << test.getSerializedTree() << std::endl;
-    std::cout << "Compressed : " << test.getCompressedString() << std::endl;
-    std::cout << "Compression ratio : " << test.getCompressionRatio() << '%' << std::endl;*/
 
-    int mainmenu;
+    char *stree = new char[test.getSerializedTree().size() + 1];
+    std::strcpy(stree, test.getSerializedTree().c_str());
+
+    std::cout << "STree addr : " << std::hex << reinterpret_cast<void*>(stree) << std::endl;
+
+    std::system("pause");
+    delete[] stree;
+
+    std::cout << "Compressed : " << test.getCompressedString() << std::endl;
+    std::cout << "Compression ratio : " << test.getCompressionRatio() << '%' << std::endl;
+
+    test.writefile("mm.compressed");*/
+
+    /*int mainmenu;
 
     do {
         mainmenu = -1;
 
-        std::cout << "Huffman Coding Compression"
+        std::cout << "Huffman Coding Compression";
 
-    } while(mainmenu!=0);
+    } while(mainmenu!=0);*/
+
+    HuffmanCode test;
+    test.readfile("mm.compressed");
+    std::cout << "Serialized tree : " << test.getSerializedTree_readable() << std::endl;
+    std::cout << test.getPayload();
+
+    /*std::ofstream testStr("test.txt", std::ios::out | std::ios::trunc);
+
+    unsigned int angka = 30;
+    testStr.write(reinterpret_cast<char*>(&angka), 4);
+
+    testStr.close();*/
 
     return 0;
 }
