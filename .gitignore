@@ -3,3 +3,7 @@ obj/
 bin/
 HuffmanCode.depend
 *.enc
+*.compressed
+Endian conversion.txt
+test.compressed.bak
+test.txt
