@@ -61,8 +61,10 @@ class HuffmanCode {
     };
 
     class bits_type {
-        std::vector<bool> bits;
+        std::vector<unsigned long> bits;
         bool modified;
+
+        std::size_t num_elements;
 
         std::string bits_str;
         std::string bits_encoded;
@@ -77,18 +79,18 @@ class HuffmanCode {
             return true;
         }
 
-        bits_type(): modified(true) {}
+        bits_type(): modified(true), num_elements(0) {}
 
-        bits_type(std::string s): modified(true) {
+        bits_type(std::string s): modified(true), num_elements(0) {
             append_str(s);
         }
 
         std::size_t size() {
-            return bits.size();
+            return num_elements;
         }
-        
+
         bits_type& reserve(std::size_t s) {
-            bits.reserve(s);
+            bits.reserve(s / 8 + 1);
             return *this;
         }
 
@@ -96,7 +98,12 @@ class HuffmanCode {
             if(is_bits(bit_text)) {
                 modified = true;
                 for(std::string::const_iterator iter = bit_text.begin(); iter != bit_text.end(); iter++) {
-                    bits.push_back(*iter=='1'? true : false);
+                    if(num_elements % 8 == 0) {
+                        bits.push_back(0);
+                    }
+
+
+
                 }
             }
             return *this;
@@ -276,14 +283,14 @@ class HuffmanCode {
             unsigned int num_bits;
             file_content.read(reinterpret_cast<char*>(&num_bits), 4);
             invert_endian_int(num_bits);
-            
+
             std::cout << "Num bits : " << num_bits << std::endl;
 
             //number of tree length in bytes
             unsigned int tree_length;
             file_content.read(reinterpret_cast<char*>(&tree_length), 4);
             invert_endian_int(tree_length);
-            
+
             std::cout << "Tree length : " << tree_length << std::endl;
 
             //read the tree
@@ -446,7 +453,7 @@ class HuffmanCode {
     }
 
     void compress() {
-        
+
         for(std::string::const_iterator iter = payload.begin(); iter!= payload.end(); iter++) {
             compressed.append(code_map.at(*iter));
         }
@@ -487,9 +494,9 @@ class HuffmanCode {
                 isNextNull = false;
                 i--;
             }
-            
-            
-            
+
+
+
 
             /*if(ptr->isLeaf()) {
                 payload += ptr->character;
@@ -504,13 +511,13 @@ class HuffmanCode {
 
 
         }
-        
+
         //TODO: Revise the algorithm later
         //extract the last character
         if(ptr->isLeaf()) {
             payload.append(1, ptr->character);
         }
-        
+
     }
 
     //use pre-order traversal
@@ -532,16 +539,16 @@ class HuffmanCode {
     }
 
 
-    
+
 
     void deserialize_tree(Node*& rootPtr, std::istream& is) {
-        
+
         if(!is.good()) return;
-        
+
         //extract token
         char c;
         is.read(&c, 1);
-        
+
         if(c == PARENT_NODE)
             c = -1;
         else if(c == NULL_NODE)
@@ -579,11 +586,11 @@ public:
 
         std::istringstream stStream(serialized_tree);
         deserialize_tree(root, stStream);
-        
+
         //reserialize tree to test
         //serialized_tree.clear();
         //serialize_tree(root);
-        
+
         decompress();
 
         std::cout << "Payload addres : " << std::hex << reinterpret_cast<void*>(&payload) << std::endl;
@@ -678,7 +685,7 @@ int main(int argc, char **argv)
 {
     //std::cout << "Hello world!" << std::endl;
 
-    HuffmanCode test(std::string("The quick brown fox jumps over a lazy dog"));
+    /*HuffmanCode test(std::string("The quick brown fox jumps over a lazy dog"));
     std::cout << test.printCharFreq() << std::endl;
     std::cout << test.print_code_map() << std::endl;
     //std::cout << test.printQueue() << std::endl;
@@ -688,7 +695,7 @@ int main(int argc, char **argv)
     std::cout << "Compressed : " << test.getCompressedString() << std::endl;
     std::cout << "Compression ratio : " << test.getCompressionRatio() << '%' << std::endl;
 
-    test.writefile("keytest.compressed");
+    test.writefile("keytest.compressed");*/
 
     /*int mainmenu;
 
@@ -699,13 +706,22 @@ int main(int argc, char **argv)
 
     } while(mainmenu!=0);*/
 
-    HuffmanCode test2;
+    /*HuffmanCode test2;
     test2.readfile("keytest.compressed");
     std::cout << "Serialized tree : " << test2.getSerializedTree_readable() << std::endl;
 
     //rserialize
 
-    std::cout << "File content :\n" << test2.getPayload() << std::endl;
+    std::cout << "File content :\n" << test2.getPayload() << std::endl;*/
+
+    std::vector<bool> test1;
+    std::vector<unsigned int> test2;
+    std::vector<unsigned long> test3;
+
+    std::cout << "Vector max size" << std::endl;
+    std::cout << "Bool : " << test1.max_size() << std::endl;
+    std::cout << "Int : " << test2.max_size() << std::endl;
+    std::cout << "Long : " << test3.max_size() << std::endl;
 
     return 0;
 }
