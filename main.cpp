@@ -12,7 +12,6 @@
 #include <iomanip>
 #include <cstring>
 
-#define NULL_NODE '\2'
 #define PARENT_NODE '\1'
 
 void clear_cin() {
@@ -40,7 +39,8 @@ class HuffmanCode {
 
         //create new node as parent of two front nodes in queue
         Node(Node* leftChild, Node* rightChild):
-            character(-1), weight(leftChild->weight + rightChild->weight), left(leftChild), right(rightChild) {}
+            character(-1), weight(leftChild->weight + rightChild->weight),
+            left(leftChild), right(rightChild) {}
 
         ~Node() {
             //recursive deletion
@@ -113,7 +113,7 @@ class HuffmanCode {
             modified = true;
             for(std::string::const_iterator iter = text.begin(); iter!= text.end(); iter++) {
                 for(int i=0; i<8; i++) {
-                    bits.push_back(static_cast<bool>((*iter >> (7 - i)) & 1));
+                    bits.push_back(static_cast<unsigned long>((*iter >> (7 - i)) & 1));
                 }
             }
             return *this;
@@ -125,7 +125,7 @@ class HuffmanCode {
             int j = 8;
             for(std::string::const_iterator iter = text.begin(); i < nBits && iter!= text.end(); iter++) {
                 for(; i < j && i < nBits; i++) {
-                    bits.push_back(static_cast<bool>((*iter >> (7 - (i % 8))) & 1));
+                    bits.push_back(static_cast<unsigned long>((*iter >> (7 - (i % 8))) & 1));
                 }
                 j += 8;
             }
@@ -156,7 +156,7 @@ class HuffmanCode {
         std::string getBits_str() {
             if(modified) {
                 std::ostringstream oss;
-                for(std::vector<bool>::const_iterator iter = bits.begin(); iter != bits.end(); iter++) {
+                for(std::vector<unsigned long>::const_iterator iter = bits.begin(); iter != bits.end(); iter++) {
                     oss << (*iter == true? '1' : '0');
                 }
 
@@ -173,7 +173,7 @@ class HuffmanCode {
                 int length = 0;
                 unsigned char process = 0;
 
-                for(std::vector<bool>::const_iterator iter = bits.begin(); iter != bits.end(); iter++) {
+                for(std::vector<unsigned long>::const_iterator iter = bits.begin(); iter != bits.end(); iter++) {
                     //set the bits
                     if(*iter)
                         process |= 1 << (7 - (length % 8));
@@ -261,7 +261,7 @@ class HuffmanCode {
             if(!output_mode) return;
 
             //write to file
-            std::ofstream outfile(filename, std::ios::out | std::ios::trunc);
+            std::ofstream outfile(filename, std::ios::out | std::ios::trunc | std::ios::binary);
             std::istringstream iss(output_payload.getEncodedBits());
 
             std::copy(std::istreambuf_iterator<char>(iss), std::istreambuf_iterator<char>(), std::ostreambuf_iterator<char>(outfile));
@@ -269,14 +269,13 @@ class HuffmanCode {
             outfile.close();
         }
 
-        void read(std::string& serial_tree, bits_type& compressed_bits) {
-            if(output_mode) return;
+        bool read(std::string& serial_tree, bits_type& compressed_bits) {
+            if(output_mode) return false;
 
-            std::ifstream infile(filename);
+            //write to file_content and close stream
+            std::ifstream infile(filename, std::ios::binary);
             std::stringstream file_content;
-
             std::copy(std::istreambuf_iterator<char>(infile), std::istreambuf_iterator<char>(), std::ostreambuf_iterator<char>(file_content));
-
             infile.close();
 
             //get the number of bits
@@ -284,64 +283,30 @@ class HuffmanCode {
             file_content.read(reinterpret_cast<char*>(&num_bits), 4);
             invert_endian_int(num_bits);
 
-            std::cout << "Num bits : " << num_bits << std::endl;
-
             //number of tree length in bytes
             unsigned int tree_length;
             file_content.read(reinterpret_cast<char*>(&tree_length), 4);
             invert_endian_int(tree_length);
 
-            std::cout << "Tree length : " << tree_length << std::endl;
-
             //read the tree
             char *tree_content = new char[tree_length + 1];
-            char *ptr = tree_content;
-
-
-
-
-            for(int i=0;i<tree_length;i++) {
-                file_content.read(ptr++, 1);
-            }
-
+            file_content.read(tree_content, tree_length);
             tree_content[tree_length] = 0;
 
-            //std::cout << "File content : " << file_content << std::endl;
-
-            //read the payload
-            //std::string payload_content(std::istreambuf_iterator<char>(file_content), std::istreambuf_iterator<char>());
-
+            //read the rest which is the payload
             std::string payload_content;
             payload_content.insert(payload_content.begin(), std::istreambuf_iterator<char>(file_content), std::istreambuf_iterator<char>());
-
-           /* std::ostringstream payload_content;
-            std::copy(std::istreambuf_iterator<char>(file_content), std::istreambuf_iterator<char>(), std::ostreambuf_iterator<char>(payload_content));*/
 
             //insert it to compressed_bits
             compressed_bits.reserve(payload_content.size());
             compressed_bits.append_str(payload_content, num_bits);
 
-            /*char *paycon = new char[payload_content.size() + 1];
-            std::strcpy(paycon, payload_content.c_str());
-
-            std::cout << "Payload address : " << std::hex << reinterpret_cast<void*>(paycon) << std::endl;*/
-
-            /*char *payload_con = new char[num_bits - 1];
-            std::strncpy(payload_con, payload_content.str().c_str(), num_bits - 1);
-            payload_con[num_bits - 2] = 0;
-
-            std::cout << "Payload con address : " << reinterpret_cast<void*>(payload_con) << std::endl;*/
-
-
+            //write the serialized tree
             serial_tree.assign(tree_content);
-            std::cout << "Payload : " << compressed_bits.getBits_str() << std::endl;
-
-            std::system("pause");
-
             delete[] tree_content;
-            //delete[] paycon;
-            //delete[] payload_con;
 
+            if(compressed_bits.size() != num_bits) return false;
+            return true;
 
         }
 
@@ -523,19 +488,19 @@ class HuffmanCode {
     //use pre-order traversal
     //this will be used to output to file
     void serialize_tree(Node* rootnode) {
-        // \2 used for null
         // \1 used for parent
-        if(rootnode == nullptr) serialized_tree += NULL_NODE;
-        else {
-            //preorder write
-            if(rootnode->character == -1)
-                serialized_tree += PARENT_NODE;
-            else
-                serialized_tree += rootnode->character;
 
-            serialize_tree(rootnode->left);
-            serialize_tree(rootnode->right);
-        }
+        if(rootnode == nullptr) return;
+
+        //preorder write
+        if(rootnode->character == -1)
+            serialized_tree += PARENT_NODE;
+        else
+            serialized_tree += rootnode->character;
+
+        serialize_tree(rootnode->left);
+        serialize_tree(rootnode->right);
+
     }
 
 
@@ -545,19 +510,17 @@ class HuffmanCode {
 
         if(!is.good()) return;
 
-        //extract token
+        //read token
         char c;
         is.read(&c, 1);
 
-        if(c == PARENT_NODE)
-            c = -1;
-        else if(c == NULL_NODE)
-            return;
-
-        rootPtr = new Node(c);
-
-        deserialize_tree(rootPtr->left, is);
-        deserialize_tree(rootPtr->right, is);
+        if(c == PARENT_NODE) {
+            rootPtr = new Node(static_cast<char>(-1));
+            deserialize_tree(rootPtr->left, is);
+            deserialize_tree(rootPtr->right, is);
+        } else {
+            rootPtr = new Node(c);
+        }
     }
 
 public:
@@ -580,9 +543,10 @@ public:
 
     }
 
-    void readfile(std::string fname) {
+    bool readfile(std::string fname) {
         FileHandler fh(fname);
-        fh.read(serialized_tree, compressed);
+
+        bool read_status = fh.read(serialized_tree, compressed);
 
         std::istringstream stStream(serialized_tree);
         deserialize_tree(root, stStream);
@@ -593,8 +557,9 @@ public:
 
         decompress();
 
-        std::cout << "Payload addres : " << std::hex << reinterpret_cast<void*>(&payload) << std::endl;
-        std::system("pause");
+        //std::cout << "Payload addres : " << std::hex << reinterpret_cast<void*>(&payload) << std::endl;
+        //std::system("pause");
+        return read_status;
     }
 
     //output to file
@@ -661,7 +626,6 @@ public:
         result.reserve(serialized_tree.size());
         for(std::string::const_iterator c = serialized_tree.begin(); c != serialized_tree.end(); c++) {
             switch(*c) {
-                case NULL_NODE: result += nullChar; break;
                 case PARENT_NODE: result += parentChar; break;
                 default: result += *c;
             }
@@ -683,45 +647,84 @@ public:
 
 int main(int argc, char **argv)
 {
-    //std::cout << "Hello world!" << std::endl;
 
-    /*HuffmanCode test(std::string("The quick brown fox jumps over a lazy dog"));
-    std::cout << test.printCharFreq() << std::endl;
-    std::cout << test.print_code_map() << std::endl;
-    //std::cout << test.printQueue() << std::endl;
+    HuffmanCode* hfCode = nullptr; //reusable object
 
-
-
-    std::cout << "Compressed : " << test.getCompressedString() << std::endl;
-    std::cout << "Compression ratio : " << test.getCompressionRatio() << '%' << std::endl;
-
-    test.writefile("keytest.compressed");*/
-
-    /*int mainmenu;
+    int mainmenu;
 
     do {
         mainmenu = -1;
 
-        std::cout << "Huffman Coding Compression";
+        std::cout << "\nHuffman Coding Compression\n";
+        std::cout << "1. Compress a text\n"
+                  << "2. Compress a file\n"
+                  << "3. Decompress a file\n"
+                  << "0. Exit\n";
 
-    } while(mainmenu!=0);*/
+        std::cout << "Choose : ";
+        std::cin >> mainmenu;clear_cin();
 
-    /*HuffmanCode test2;
-    test2.readfile("keytest.compressed");
-    std::cout << "Serialized tree : " << test2.getSerializedTree_readable() << std::endl;
+        if(mainmenu == 1) {
+            std::string text;
+            std::cout << "Enter text and press enter :" << std::endl;
 
-    //rserialize
+            std::getline(std::cin, text);
+            //clear_cin();
 
-    std::cout << "File content :\n" << test2.getPayload() << std::endl;*/
+            //check if eligible to compress
+            if(text.empty()) {
+                std::cout << "Invalid input, try again!" << std::endl;
+                continue;
+            }
 
-    std::vector<bool> test1;
-    std::vector<unsigned int> test2;
-    std::vector<unsigned long> test3;
+            std::string filename;
+            do {
+                std::cout << "Enter filename : ";
+                std::getline(std::cin, filename);
+                //clear_cin();
+            } while(filename.empty());
 
-    std::cout << "Vector max size" << std::endl;
-    std::cout << "Bool : " << test1.max_size() << std::endl;
-    std::cout << "Int : " << test2.max_size() << std::endl;
-    std::cout << "Long : " << test3.max_size() << std::endl;
+            //write the file
+            hfCode = new HuffmanCode(text);
+            hfCode->writefile(filename);
+
+            std::cout << "Text written to " << filename << ".\n";
+            std::cout << "Text size reduced by : " << hfCode->getCompressionRatio() << "%\n";
+
+            delete hfCode;
+        }
+
+        else if(mainmenu == 2) {
+            std::cout << "Will be implemented later. Thanks for the patience." << std::endl;
+        }
+
+        else if(mainmenu == 3) {
+            std::cout << "Enter file name relative to this directory : ";
+            std::string filename;
+            std::getline(std::cin, filename);
+
+            std::ifstream infile(filename);
+
+            //check file exists
+            if(!infile.good()) {
+                std::cout << "File not found!" << std::endl;
+                continue;
+            }
+
+            hfCode = new HuffmanCode;
+            bool read_status = hfCode->readfile(filename);
+
+            if(!read_status) std::cout << "Warning! There's a problem reading the file, the content may be truncated" << std::endl;
+
+            std::cout << "The compression ratio was: " << hfCode->getCompressionRatio() << "%\n";
+            std::cout << "File content for " << filename << ':' << std::endl;
+            std::cout << hfCode->getPayload() << std::endl;
+
+            delete hfCode;
+        }
+
+
+    } while(mainmenu!=0);
 
     return 0;
 }
