@@ -15,7 +15,18 @@
 #define PARENT_NODE '\1'
 
 void clear_cin() {
+    //if(std::cin.eof()) return;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+    //std::cin.clear();
+}
+
+template<typename K, typename V>
+void insertMap(std::map<K, V>& mapRef, typename std::map<K, V>::iterator& hint, K key, V value) {
+    if(mapRef.empty()) {
+        hint = mapRef.insert(std::pair<K, V>(key, value)).first;
+    } else {
+        hint = mapRef.insert(hint, std::pair<K, V>(key, value));
+    }
 }
 
 void invert_endian_int(unsigned int& num) {
@@ -400,13 +411,14 @@ class HuffmanCode {
 
         //if leaf node
         if(rootnode->isLeaf()) {
-            if(code_map.empty()) {
+            /*if(code_map.empty()) {
                 //this will return iterator to newly inserted data as hint for next insertion
                 code_map_iterator = code_map.insert(std::pair<char, std::string>(rootnode->character, code)).first;
             }
             else { //with hint
                 code_map_iterator = code_map.insert(code_map_iterator, std::pair<char, std::string>(rootnode->character, code));
-            }
+            }*/
+            insertMap(code_map, code_map_iterator, rootnode->character, code);
         }
     }
 
@@ -445,7 +457,7 @@ class HuffmanCode {
 
             if(isNextNull) {
                 //we reached the leaf, decrypt it!
-                payload.append(1, ptr->character);
+                payload += ptr->character;
 
                 //reset variables
                 ptr = root;
@@ -675,7 +687,7 @@ int main(int argc, char **argv)
             std::cout << "Enter text and press enter :" << std::endl;
 
             std::getline(std::cin, text);
-            //clear_cin();
+            clear_cin();
 
             //check if eligible to compress
             if(text.empty()) {
@@ -687,7 +699,7 @@ int main(int argc, char **argv)
             do {
                 std::cout << "Enter filename : ";
                 std::getline(std::cin, filename);
-                //clear_cin();
+                clear_cin();
             } while(filename.empty());
 
             //write the file
@@ -707,7 +719,7 @@ int main(int argc, char **argv)
         else if(mainmenu == 3) {
             std::cout << "Enter file name relative to this directory : ";
             std::string filename;
-            std::getline(std::cin, filename);
+            std::getline(std::cin, filename);clear_cin();
 
             std::ifstream infile(filename);
 
